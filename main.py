@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Path
 from pydantic import BaseModel
 import sqlite3
 import hashlib
@@ -56,7 +56,6 @@ conn.cursor().execute(
 conn.commit()
 
 # Benutzer hinzufügen
-
 class UserCreateRequest(BaseModel):
     username: str
     password: str
@@ -111,7 +110,6 @@ class UserReadResponse(BaseModel):
 @app.get("/users", response_model=list[UserReadResponse])
 def list_users():
     cursor = conn.cursor()
-
     cursor.execute("SELECT id, username FROM users ORDER BY id ASC")
     rows = cursor.fetchall()
 
@@ -119,6 +117,63 @@ def list_users():
         {"id": row[0], "username": row[1]}
         for row in rows
     ]
+
+# Einzelnen User zurückgeben
+@app.get("/users/{user_id}", response_model=UserReadResponse)
+def user( user_id: int = Path(..., gt=0) ):
+    cursor = conn.cursor()
+    cursor.execute(
+    "SELECT id, username FROM users WHERE id = ?", (user_id,) )
+    row = cursor.fetchone()
+    if row is None:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+    return { "id": row[0], "username": row[1] }
+
+# Passwort ändern
+class PasswordChangeRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+@app.patch("/users/{user_id}/password", status_code=204)
+def change_password(
+        user_id: int = Path(..., gt=0),
+        data: PasswordChangeRequest = ... ):
+    cursor = conn.cursor()
+    cursor.execute(
+    "SELECT password_hash FROM users WHERE id = ?", (user_id,) )
+    row = cursor.fetchone()
+    # Cecken ob der User existiert
+    if row is None:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+    # Angegebenes Passwort mit gespeichertem Passwort verleichen
+    stored_password_hash = row[0]
+    current_password_hash = hash_password(data.current_password)
+    if current_password_hash != stored_password_hash:
+        raise HTTPException(
+            status_code=401,
+            detail="Password is incorrect"
+        )
+    # Neues Password validieren
+    valid, reason = validate_password_internal(data.new_password)
+    if not valid:
+        raise HTTPException(
+            status_code=400,
+            detail=reason
+        )
+    # Neues Passwort hashen und speichern
+    new_password_hash = hash_password(data.new_password)
+    cursor.execute(
+        "UPDATE users SET password_hash = ? WHERE id = ?",
+        (new_password_hash, user_id)
+    )
+    conn.commit()
+
 
 
 # Passwortvalidierung, intern
