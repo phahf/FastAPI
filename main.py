@@ -102,6 +102,30 @@ def create_user(data: UserCreateRequest):
     "username": data.username
 }
 
+# User löschen
+@app.delete("/users/{user_id}", status_code=204)
+def delete_user(
+        user_id: int = Path(..., gt=0) ):
+    cursor = conn.cursor()
+    # Überprüfen ob User existiert
+    cursor.execute(
+        "SELECT id FROM users WHERE id = ?",
+        (user_id,)
+    )
+    row = cursor.fetchone()
+    if row is None:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+    # User löschen
+    cursor.execute(
+        "DELETE FROM users WHERE id = ?",
+        (user_id,)
+    )
+    conn.commit()
+
+
 # Liste mit Usern zurückgeben
 class UserReadResponse(BaseModel):
     id: int
