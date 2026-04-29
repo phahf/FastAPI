@@ -1,29 +1,31 @@
+import pytest
 from fastapi.testclient import TestClient
 from app.main import app, get_user_service
 from tests.fakes import FakeUserService
 
-client = TestClient(app)
 
 
-def setup_function():
-    fake_service = FakeUserService()
-    app.dependency_overrides[get_user_service] = lambda: fake_service
+@pytest.fixture
+def fake_user_service():
+    return FakeUserService()
 
-
-def teardown_function():
+@pytest.fixture
+def client(fake_user_service):
+    app.dependency_overrides[get_user_service] = lambda: fake_user_service
+    with TestClient(app) as client:
+        yield client
     app.dependency_overrides.clear()
-
 
 ## Happy Path tests
 
-def test_api_get_users_happy_path():
+def test_api_get_users_happy_path(client):
     response = client.get("/users")
 
     assert response.status_code == 200
     assert isinstance(response.json(), list)
 
 
-def test_api_create_user_happy_path():
+def test_api_create_user_happy_path(client):
     response = client.post(
         "/users",
         json={
@@ -33,13 +35,12 @@ def test_api_create_user_happy_path():
     )
 
     assert response.status_code == 201
-
     data = response.json()
     assert "id" in data
     assert data["username"] == "happyuser"
 
 
-def test_api_get_user_by_id_happy_path():
+def test_api_get_user_by_id_happy_path(client):
     create = client.post(
         "/users",
         json={
@@ -48,7 +49,6 @@ def test_api_get_user_by_id_happy_path():
         }
     )
     user_id = create.json()["id"]
-
     response = client.get(f"/users/{user_id}")
 
     assert response.status_code == 200
@@ -57,7 +57,7 @@ def test_api_get_user_by_id_happy_path():
     assert data["username"] == "singleuser"
 
 
-def test_api_change_password_happy_path():
+def test_api_change_password_happy_path(client):
     create = client.post(
         "/users",
         json={
@@ -66,7 +66,6 @@ def test_api_change_password_happy_path():
         }
     )
     user_id = create.json()["id"]
-
     response = client.patch(
         f"/users/{user_id}/password",
         json={
@@ -78,7 +77,7 @@ def test_api_change_password_happy_path():
     assert response.status_code == 204
 
 
-def test_api_delete_user_happy_path():
+def test_api_delete_user_happy_path(client):
     create = client.post(
         "/users",
         json={
@@ -87,7 +86,6 @@ def test_api_delete_user_happy_path():
         }
     )
     user_id = create.json()["id"]
-
     response = client.delete(f"/users/{user_id}")
 
     assert response.status_code == 204
@@ -131,13 +129,13 @@ def test_api_delete_user_happy_path():
 #     assert response.status_code == 409
 
 
-def test_api_get_user_not_found():
+def test_api_get_user_not_found(client):
     response = client.get("/users/999999")
 
     assert response.status_code == 404
 
 
-def test_api_change_password_user_not_found():
+def test_api_change_password_user_not_found(client):
     response = client.patch(
         "/users/999999/password",
         json={

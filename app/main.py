@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, Path, Query, Depends
+from contextlib import asynccontextmanager
 from pydantic import BaseModel
 from typing import Literal
-import sqlite3
 import app.utilities as util
 from app.service import UserService
 from app.exceptions import ( 
@@ -9,62 +9,26 @@ from app.exceptions import (
         UserAlreadyExists,
         InvalidPassword, 
         InvalidCurrentPassword )
+from app.db.engine import create_db_and_tables, get_session
 
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    create_db_and_tables()
+    yield
 
 
-# ### Minimalbeispiele
-
-# # Einfache Get-Anfragen 
-# class StatusResponse(BaseModel):
-#     status: str
-
-# @app.get("/")
-# def read_root():
-#     return {"status": "okkk"}
-
-# @app.get("/health", response_model=StatusResponse)
-# def health():
-#     return {"statuss": "healthy", "status": "yes"}
+app = FastAPI(lifespan=lifespan)
 
 
-# # Get-Anfrage mit Parameter
-# class GreetingResponse(BaseModel):
-#     greeting: str
-
-# @app.get("/greet", response_model=GreetingResponse)
-# def greet(name: str):
-#     return {"greeting": f"Hallo {name}"}
-
-
-# # Post-Anfrage
-# class EchoRequest(BaseModel):
-#     message: str
-
-# @app.post("/echo")
-# def echo(data: EchoRequest):
-#     return data
 
 
 ### Nutzerdatenbank mit Passwortüberprüfung
 
-# Datenbank
-conn = sqlite3.connect("users.db", check_same_thread=False)
-conn.cursor().execute(
-    """
-    CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        username TEXT NOT NULL UNIQUE,
-        password_hash TEXT NOT NULL
-    )
-    """
-)
-conn.commit()
-
 # Dependency 
 def get_user_service() -> UserService:
-    return UserService(conn)
+    return UserService(get_session())
 
 
 # Benutzer hinzufügen

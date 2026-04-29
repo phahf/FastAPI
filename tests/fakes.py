@@ -1,4 +1,4 @@
-from app.exceptions import UserNotFound, UserAlreadyExists
+from app.exceptions import UserNotFound
 
 class FakeUserService:
     def __init__(self):
